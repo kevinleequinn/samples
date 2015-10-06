@@ -1,0 +1,173 @@
+#!/bin/sh
+#
+# Rackspace virtual server kernel firewall setup using netfilter
+
+# set the default policies to ACCEPT in case this breaks...
+/sbin/iptables -P INPUT ACCEPT
+/sbin/iptables -P OUTPUT ACCEPT
+/sbin/iptables -P FORWARD ACCEPT
+#
+# setup the ip variables
+MAINHOST=250.156.178.11
+INTHOST=10.150.4.154
+#
+# clean iptables
+/sbin/iptables -F
+/sbin/iptables -X
+/sbin/iptables -Z
+/sbin/iptables -t nat -F
+/sbin/iptables -t nat -X
+/sbin/iptables -t nat -Z
+/sbin/iptables -t mangle -F
+/sbin/iptables -t mangle -X
+/sbin/iptables -t mangle -Z
+#
+# drop unclean or invalid packets
+#/sbin/iptables -t mangle -A PREROUTING -m unclean -j DROP  #!EXPERIMENTAL
+/sbin/iptables -t mangle -A PREROUTING -m state --state INVALID -j DROP
+#
+# allow anything from loopback
+/sbin/iptables -A INPUT -i lo -j ACCEPT
+#
+# allow anything from internal network
+#/sbin/iptables -A INPUT -i eth1 -j ACCEPT
+#
+# create the chains we need
+/sbin/iptables -N PORTSEN
+/sbin/iptables -N icmp_in
+/sbin/iptables -N tcp_in
+/sbin/iptables -N udp_in
+/sbin/iptables -N tcp_int
+/sbin/iptables -N allowed
+#
+# add on the portsentry chain
+/sbin/iptables -A INPUT -i eth0 -j PORTSEN
+/sbin/iptables -A INPUT -i eth1 -j PORTSEN
+#
+# disallow from malicious IP's
+#/sbin/iptables -I PORTSEN -s 66.70.151.89 -j DROP
+#
+# allow Rackspace management
+/sbin/iptables -A PORTSEN --src 72.3.128.84 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 69.20.0.1 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 50.57.22.125 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 120.136.34.22 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 212.100.225.49 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 212.100.225.42 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 119.9.4.2 -m comment --comment "Rackspace Cloud Bastion" -j ACCEPT 
+/sbin/iptables -A PORTSEN --src 67.192.155.96/27 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 120.136.33.192/27 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 69.20.80.0/28 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 72.4.123.216 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 89.234.21.64/28 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 173.203.5.160/27 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 173.203.32.136/29 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 64.49.200.192/27 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 166.78.7.146 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 50.56.249.239 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 166.78.107.18 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 162.209.4.155 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 95.138.174.55 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 162.13.1.53 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 119.9.12.91 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 119.9.12.98 -m comment --comment "Rackspace Cloud Automation" -j ACCEPT 
+/sbin/iptables -A PORTSEN --src 50.56.142.128/26 -m comment --comment "Rackspace Cloud Monitoring" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 180.150.149.64/26 -m comment --comment "Rackspace Cloud Monitoring" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 69.20.52.192/26 -m comment --comment "Rackspace Cloud Monitoring" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 78.136.44.0/26 -m comment --comment "Rackspace Cloud Monitoring" -j ACCEPT
+/sbin/iptables -A PORTSEN --src 50.57.61.0/26 -m comment --comment "Rackspace Cloud Monitoring" -j ACCEPT
+#
+# only allow acceptable tcp states in
+/sbin/iptables -A allowed -p TCP --syn -m state --state NEW -j ACCEPT
+/sbin/iptables -A allowed -p TCP -j RETURN
+#
+# INTHOST
+#
+#/sbin/iptables -A tcp_int -p TCP --dport ssh -j allowed
+/sbin/iptables -A tcp_int -p TCP --dport ssh -s 10.150.6.150/32 -j allowed
+/sbin/iptables -A tcp_int -p TCP --dport mysql -s 10.150.6.150/32 -j allowed
+#
+# MAINHOST
+#
+# make nice with the internet message control protocol
+#/sbin/iptables -A icmp_in -p ICMP --icmp-type 0  -m limit --limit  5/s -j ACCEPT
+#/sbin/iptables -A icmp_in -p ICMP --icmp-type 3  -m limit --limit 10/s -j ACCEPT
+#/sbin/iptables -A icmp_in -p ICMP --icmp-type 4  -m limit --limit 10/s -j ACCEPT
+#/sbin/iptables -A icmp_in -p ICMP --icmp-type 8  -m limit --limit  5/s -j ACCEPT
+#/sbin/iptables -A icmp_in -p ICMP --icmp-type 11 -m limit --limit 10/s -j ACCEPT
+#
+# mainhost tcp services  (comment out what is not wanted)
+#/sbin/iptables -A tcp_in -p TCP --dport ftp -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport ssh -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport telnet -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport smtp -j allowed
+/sbin/iptables -A tcp_in -p TCP --dport http -j allowed
+/sbin/iptables -A tcp_in -p TCP --dport https -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport pop3 -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport imap -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport auth -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport snmp -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport netbios-ns -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport netbios-dgm -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport netbios-ssn -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport shell -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport exec -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport pop3s -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport mysql -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport 4000:4100 -j allowed
+/sbin/iptables -A tcp_in -p TCP --dport 4949 -s 96.146.12.6/32 -j allowed
+#/sbin/iptables -A tcp_in -p TCP --dport 6000 -j allowed
+#
+# mainhost udp services (comment out what is not wanted) (these are ntp & icq)
+#/sbin/iptables -A udp_in -p UDP --dport domain -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --dport 1024:65535 -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --dport netbios-ns -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --dport netbios-dgm -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --dport netbios-ssn -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --sport ntp        --dport ntp -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --sport 1023:65535 --dport ntp -j ACCEPT
+#/sbin/iptables -A udp_in -p UDP --sport 4000 -s 68.49.66.44 -j ACCEPT
+#
+#
+#
+#
+# BUILD INPUT TABLE:
+#
+# drop packets with a local source address
+/sbin/iptables -A INPUT -i eth0 -p ALL -s 127.0.0.1/32 -j DROP
+/sbin/iptables -A INPUT -i eth0 -p ALL -s $MAINHOST/32 -j DROP
+/sbin/iptables -A INPUT -i eth1 -p ALL -s 127.0.0.1/32 -j DROP
+/sbin/iptables -A INPUT -i eth1 -p ALL -s $INTHOST/32 -j DROP
+#
+# accept packets from established and related connections
+/sbin/iptables -A INPUT -i eth0 -p ALL -d $MAINHOST/32 -m state --state ESTABLISHED,RELATED -j ACCEPT
+/sbin/iptables -A INPUT -i eth1 -p ALL -d $INTHOST/32 -m state --state ESTABLISHED,RELATED -j ACCEPT
+#
+# put together the rest of the INPUT table...
+/sbin/iptables -A INPUT -i eth0 -p ICMP -d $MAINHOST/32 -j icmp_in
+/sbin/iptables -A INPUT -i eth0 -p TCP -d $MAINHOST/32 -j tcp_in
+/sbin/iptables -A INPUT -i eth0 -p UDP -d $MAINHOST/32 -j udp_in
+/sbin/iptables -A INPUT -i eth1 -p TCP -d $INTHOST/32 -j tcp_int
+#
+# little bit of output control
+/sbin/iptables -A OUTPUT -o lo -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p ALL -s $MAINHOST/32 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth1 -p ALL -s $INTHOST/32 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+#
+# log all DROPed packets (except netbios and broadcasts)
+#/sbin/iptables -A INPUT -p UDP --dport netbios-ns:netbios-ssn -j DROP
+#/sbin/iptables -A INPUT -p UDP --sport netbios-ns:netbios-ssn -j DROP
+#/sbin/iptables -A INPUT -d 0.0.0.255/0.0.0.255 -j DROP
+#/sbin/iptables -A INPUT -m limit --limit 3/minute --limit-burst 3 -j LOG \
+#        --log-level 4 --log-prefix "INPUT packet died: "
+#/sbin/iptables -A OUTPUT -m limit --limit 3/minute --limit-burst 3 -j LOG \
+#        --log-level 4 --log-prefix "OUTPUT packet died: "
+#
+# set the default policies to DROP
+/sbin/iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited
+/sbin/iptables -P INPUT DROP
+/sbin/iptables -P OUTPUT DROP
+/sbin/iptables -P FORWARD DROP
+#
+# save this puppy!
+#/etc/rc.d/init.d/iptables save

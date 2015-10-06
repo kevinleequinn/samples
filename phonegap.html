@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Bundle Loader for Phonegap/Cordova</title>
+<meta charset="utf-8" />
+<meta name="format-detection" content="telephone=no" />
+<meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width, height=device-height, target-densitydpi=device-dpi" />
+<style type="text/css">
+* {
+	-webkit-tap-highlight-color: rgba(0,0,0,0); /* make transparent link selection, adjust last value opacity 0 to 1.0 */
+}
+
+body {
+	-webkit-touch-callout: none;	/* prevent callout to copy image, etc when tap to hold */
+	-webkit-text-size-adjust: none;	/* prevent webkit from resizing text to fit */
+	-webkit-user-select: none;		/* prevent copy paste, to allow, change 'none' to 'text' */
+	background-color: #FFFFFF;
+	color: #000000;
+	font-family: Tahoma, Helvetica, Arial, sans-serif;
+	font-size: 16px;
+	width: 100%;
+	height: 100%;
+	margin: 0px;
+	padding: 0px;
+}
+</style>
+</head>
+<body>
+
+<div style="text-align: center;"><img src="./res/logo.png" style="margin-top: 20px; width: 80%;" /></div>
+<div id="msg" style="margin: 10px; text-align: center;">Loading...</div>
+<div id="retry" style="display: none; margin: 20px; padding: 10px; border: 2px solid #000; text-align: center;" onclick="app.onDeviceReady()">Load Again</div>
+
+<script type="text/javascript" src="phonegap.js"></script>
+<script type="text/javascript">
+var app = {
+	initialize: function() {
+		this.bindEvents();
+	},
+
+	/* Common events are: 'load', 'deviceready', 'offline', and 'online'. */
+	bindEvents: function() {
+		document.addEventListener('deviceready', this.onDeviceReady, false);
+	},
+
+	/* The scope of 'this' is the event. */
+	onDeviceReady: function() {
+
+		if ( navigator.connection.type == Connection.NONE || navigator.connection.type == Connection.UNKNOWN ) {
+			window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, function(fs) {
+				fs.root.getFile('bundle.html', {create: false, exclusive: false}, function(fe) {
+		/* if offline and bundle exists, then load it */
+					document.location = fe.toURL();
+				}, function() {
+		/* if offline and bundle does not exist, then error */
+					document.getElementById('msg').innerHTML = 'Device must be online for first start: ' + navigator.connection.type;
+					document.getElementById('retry').style.display = 'block';
+				});
+			}, app.errorHandler); /* failed to get filesystem */
+		} else {
+			window.requestFileSystem(LocalFileSystem.PERSISTENT, 1024*1024, function(fs) {
+				fs.root.getFile('bundle.html', {create: false, exclusive: false}, function(fe) {
+					fe.getMetadata(function(m){
+						var now = new Date();
+						var age = new Date(m.modificationTime);
+						if ( now.getTime() - age.getTime() > 600000 ) { /* 600000 == ten minutes */
+							fs.root.getDirectory('.', {create: true, exclusive: false}, function(dir) {
+		/* if bundle exists but is stale, then reget the bundle */
+								var ask = localStorage.getItem('session') && localStorage.getItem('session').match(/^\d+$/) ? '&s='+ localStorage.getItem('session') : '&f=nologin&unique='+ device.uuid.replace(/\|/g,'~');
+								var fileTransfer = new FileTransfer();
+								fileTransfer.download(
+									encodeURI(url + ask +'&cordova='+ ver +'|'+ device.cordova.replace(/\|/g,'~') +'|'+ device.platform.replace(/\|/g,'~') +'|'+ device.version.replace(/\|/g,'~') +'|'+ device.model.replace(/\|/g,'~') +'|'+ device.uuid.replace(/\|/g,'~')),
+									dir.toURL() + '/bundle.html',
+									function(bdl) {
+		/* transfer succeeded, then load it */
+										document.location = bdl.toURL();
+									},
+									function(err) {
+		/* transfer failed, then load the old bundle */
+										document.location = fe.toURL();
+									}
+								);
+							}, app.errorHandler); /* failed to get directory */
+						} else {
+		/* if bundle exists and is not stale, then load it */
+							document.location = fe.toURL();
+						}
+					}, function(err) {
+		/* failed to get metadata, so error */
+						document.getElementById('msg').innerHTML = 'Metadata Failed: ' + err.source + ';' + err.target;
+						document.getElementById('retry').style.display = 'block';
+					});
+				}, function() {
+					fs.root.getDirectory('.', {create: true, exclusive: false}, function(dir) {
+		/* if bundle does not exist, then get it */
+						var fileTransfer = new FileTransfer();
+						fileTransfer.download(
+							encodeURI(url +'&f=nologin&unique='+ device.uuid.replace(/\|/g,'~') +'&cordova='+ ver +'|'+ device.cordova.replace(/\|/g,'~') +'|'+ device.platform.replace(/\|/g,'~') +'|'+ device.version.replace(/\|/g,'~') +'|'+ device.model.replace(/\|/g,'~') +'|'+ device.uuid.replace(/\|/g,'~')),
+							dir.toURL() + '/bundle.html',
+							function(bdl) {
+		/* transfer succeeded, then load it */
+								document.location = bdl.toURL();
+							},
+							function(err) {
+		/* transfer failed, then error */
+								document.getElementById('msg').innerHTML = 'Transfer Failed: ' + err.source + ';' + err.target;
+								document.getElementById('retry').style.display = 'block';
+							}
+						);
+					}, app.errorHandler); /* failed to get directory */
+				});
+			}, app.errorHandler); /* failed to get filesystem */
+		}
+	},
+
+	errorHandler: function(e) {
+		var msg = '';
+
+		switch (e.code) {
+			case FileError.NOT_FOUND_ERR:
+				msg = 'NOT_FOUND_ERR';
+				break;
+			case FileError.SECURITY_ERR:
+				msg = 'SECURITY_ERR';
+				break;
+			case FileError.ABORT_ERR:
+				msg = 'ABORT_ERR';
+				break;
+			case FileError.NOT_READABLE_ERR:
+				msg = 'NOT_READABLE_ERR';
+				break;
+			case FileError.ENCODING_ERR:
+				msg = 'ENCODING_ERR';
+				break;
+			case FileError.NO_MODIFICATION_ALLOWED_ERR:
+				msg = 'NO_MODIFICATION_ALLOWED_ERR';
+				break;
+			case FileError.INVALID_STATE_ERR:
+				msg = 'INVALID_STATE_ERR';
+				break;
+			case FileError.SYNTAX_ERR:
+				msg = 'SYNTAX_ERR';
+				break;
+			case FileError.INVALID_MODIFICATION_ERR:
+				msg = 'INVALID_MODIFICATION_ERR';
+				break;
+			case FileError.QUOTA_EXCEEDED_ERR:
+				msg = 'QUOTA_EXCEEDED_ERR';
+				break;
+			case FileError.TYPE_MISMATCH_ERR:
+				msg = 'TYPE_MISMATCH_ERR';
+				break;
+			case FileError.PATH_EXISTS_ERR:
+				msg = 'PATH_EXISTS_ERR';
+				break;
+			default:
+				msg = 'Unknown Error';
+				break;
+		};
+
+		document.getElementById('msg').innerHTML = 'FileSystem Failed: ' + msg;
+		document.getElementById('retry').style.display = 'block';
+	}
+};
+
+var url = 'https://kq2.net/wherever/index.cgi?a=a';
+var ver = '1.0.1';
+app.initialize();
+</script>
+</body>
+</html>
